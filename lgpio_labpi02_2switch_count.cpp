@@ -9,14 +9,15 @@ int key = 25;
 int count = 0;
 int h;
 
+#define NUMTHRED 2
 void *getKey(void *param);
 void *displayKey(void *param);
 
 int main(){
     int i;
-	pthread_t tid[2];
-    pthread_attr_t attr[2];
-    void *(*thread[2])(void *)={getKey,displayKey};
+	pthread_t tid[NUMTHRED];
+    pthread_attr_t attr[NUMTHRED];
+    void *(*thread[NUMTHRED])(void *)={getKey,displayKey};
     if((h=lgGpiochipOpen(0)) < 0) exit(-1);
 
     //Set as input with pull-up resistor enabled
