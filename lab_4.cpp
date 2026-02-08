@@ -235,18 +235,24 @@ int getch(){
 
 void blinkingLED(){
     int i,j;
-    int pattern[5][4]={{1,0,0,0},
+    int stepDistance;
+    int pattern[4][4]={{1,0,0,0},
                        {0,1,0,0},
                        {0,0,1,0},
-                       {0,0,0,1},
-                       {1,1,1,1}};
+                       {0,0,0,1}};
 
     while(running){
         for(i=0;i<4 && running;i++){
-            for(j=0;j<4;j++)
-                lgGpioWrite(h,ledGPIO[j],pattern[i][j]);
+            stepDistance = distanceStepToKeyNum(toCm(ultraSonic()));
+            for(j=0;j<4;j++){
+                if (stepDistance <= 1) {
+                    lgGpioWrite(h,ledGPIO[j],1);
+                } else {
+                    lgGpioWrite(h,ledGPIO[j],pattern[i][j]);
+                }
+            }
             // usleep(100000 * keynum);
-            usleep(100000 * distanceStepToKeyNum(toCm(ultraSonic())));
+            usleep(100000 * stepDistance);
         }
     }
     for(j=0;j<4;j++)
