@@ -134,10 +134,13 @@ int getch(){
 
 void blinkingLED(){
     int i,j;
-    int pattern[2][4]={{1,0,1,0},{0,1,0,1}};
+    int pattern[4][4]={{1,0,0,0},
+                       {0,1,0,0},
+                       {0,0,1,0},
+                       {0,0,0,1}};
 
     while(running){
-        for(i=0;i<2 && running;i++){
+        for(i=0;i<4 && running;i++){
             for(j=0;j<4;j++)
                 lgGpioWrite(h,ledGPIO[j],pattern[i][j]);
             usleep(100000 * keynum);

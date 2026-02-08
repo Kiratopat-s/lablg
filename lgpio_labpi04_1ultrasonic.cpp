@@ -58,7 +58,7 @@ void initGPIO(){
 
     //Set echo pin as input
     lgGpioClaimInput(h,LG_SET_PULL_NONE,echo);
-    sleep(2);
+    //sleep(2);
 }
 
 int ultraSonic(){
