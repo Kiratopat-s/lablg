@@ -115,22 +115,37 @@ void *ultrasonic_handler(void *param){
         distanceCm = toCm(delay);
         step = distanceStepToKeyNum(distanceCm);
         
-        // Update servo position based on distance
-        // Map distance: close (step 1-3) -> left (0-30%), medium (4-6) -> center (40-60%), far (7-9) -> right (70-100%)
-        if(step <= 3){
-            pwm = 10 + (step-1) * 10;  // 10-30% (left side)
-        } else if(step <= 6){
-            pwm = 40 + (step-4) * 10;  // 40-60% (center)
+        // Smooth servo position mapping based on continuous distance
+        // Map 0-90cm range to servo positions: close -> left, far -> right
+        const double MIN_DISTANCE = 5.0;   // Minimum distance in cm
+        const double MAX_DISTANCE = 90.0;  // Maximum distance in cm
+        const int MIN_PWM = 5;             // Leftmost servo position (5%)
+        const int MAX_PWM = 95;            // Rightmost servo position (95%)
+        
+        // Clamp distance to working range
+        double clampedDistance = distanceCm;
+        if(clampedDistance < MIN_DISTANCE) clampedDistance = MIN_DISTANCE;
+        if(clampedDistance > MAX_DISTANCE) clampedDistance = MAX_DISTANCE;
+        
+        // Linear interpolation for smooth servo movement
+        double ratio = (clampedDistance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+        int newPwm = (int)(MIN_PWM + ratio * (MAX_PWM - MIN_PWM));
+        
+        // Smooth PWM transitions to avoid jerky movements
+        if(abs(newPwm - pwm) > 2) {
+            // If change is significant, move gradually
+            if(newPwm > pwm) pwm += 2;
+            else if(newPwm < pwm) pwm -= 2;
         } else {
-            pwm = 70 + (step-7) * 10;  // 70-90% (right side)
+            pwm = newPwm;
         }
         
-        // Ensure PWM stays within safe bounds for SG90 servo (0-100%)
-        if(pwm < 0) pwm = 0;
-        if(pwm > 100) pwm = 100;
+        // Final bounds check
+        if(pwm < MIN_PWM) pwm = MIN_PWM;
+        if(pwm > MAX_PWM) pwm = MAX_PWM;
         
-        printf("Distance = %5d  (%5.1fcm) | step : %d | servo PWM: %d%%     \r",
-            delay, distanceCm, step, pwm);
+        printf("Distance = %5d (%5.1fcm) | step: %d | servo: %d%% (%.1fcm->%.1f%%)     \r",
+            delay, distanceCm, step, pwm, clampedDistance, ratio*100);
         fflush(stdout);
         usleep(50000);  // Increased delay for smoother servo movement
     }
