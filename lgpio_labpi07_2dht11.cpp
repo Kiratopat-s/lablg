@@ -18,7 +18,7 @@ void gpio_stop(int sig);
 int running = 1;
 int h;
 #define  DHT11_PIN   17  // GPIO_17
-#define  DHT11_DELAY 75  // Delay time for detecting 0 or 1  79
+#define  DHT11_DELAY 77  // Delay time for detecting 0 or 1  79
 struct DHT11_data{
     float temp;
     float humidity;

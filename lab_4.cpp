@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "pi.h"
 
 int keyGPIO_row[4]={21,22,23,24};
 int keyGPIO_col[3]={25,26,27};
@@ -12,7 +13,7 @@ int keyMap[4][3]={{'1','2','3'},{'4','5','6'},{'7','8','9'},{'*','0','#'}};
 int ledGPIO[4]={4,5,6,12};
 int ledLevel[4]={0};
 
-#define NUMTHRED 3
+#define NUMTHRED 4
 void *numpad_handler(void *param);
 void *led_running(void *param);
 void blinkingLED();
@@ -36,6 +37,13 @@ double toCm(int distance);
 int distanceStepToKeyNum(double distanceCm);
 // ---- end of ultrasonic setup
 
+
+// ---- PWM setup
+volatile int pwm=50;  // Make volatile for thread safety
+int PWM_pin=18;
+void *servoPWM(void *param);
+// ---- end of PWM setup
+
 int ch;
 volatile int keynum = 1;
 volatile bool running = true; 
@@ -49,7 +57,7 @@ int main(){
     int i,j;
     pthread_t tid[NUMTHRED];
     pthread_attr_t attr[NUMTHRED];
-    void *(*thread[NUMTHRED])(void *)={numpad_handler, led_running, ultrasonic_handler};
+    void *(*thread[NUMTHRED])(void *)={numpad_handler, led_running, ultrasonic_handler, servoPWM};
     
     // // Open GPIO chip once in main
     // if((h=lgGpiochipOpen(0)) < 0) {
@@ -63,15 +71,15 @@ int main(){
     
     signal(SIGINT, gpio_stop);
 
-    for(i=0;i<3;i++){
+    for(i=0;i<NUMTHRED;i++){
         pthread_attr_init(&attr[i]);
         pthread_create(&tid[i],&attr[i],thread[i],NULL);
     }
-    for(i=0;i<3;i++){
+    for(i=0;i<NUMTHRED;i++){
         pthread_join(tid[i],NULL);
     }
 
-    for(i=0;i<3;i++){
+    for(i=0;i<NUMTHRED;i++){
         pthread_attr_destroy(&attr[i]);
     }
 
@@ -89,6 +97,8 @@ void *ultrasonic_handler(void *param){
     int distance[8]={0};
     int delay;
     int count=0;
+    double distanceCm;
+    int step;
 
     // initGPIOUltrasonic();
     printf("Ultrasonic thread started\n");
@@ -102,10 +112,27 @@ void *ultrasonic_handler(void *param){
         distance[count]= delay;
         count = (count+1)%8;
         delay = average(distance,8);
-        printf("Distance = %5d  (%5.1fcm) | current step : %d     \r",
-            delay,toCm(delay), distanceStepToKeyNum(toCm(delay)));
+        distanceCm = toCm(delay);
+        step = distanceStepToKeyNum(distanceCm);
+        
+        // Update servo position based on distance
+        // Map distance: close (step 1-3) -> left (0-30%), medium (4-6) -> center (40-60%), far (7-9) -> right (70-100%)
+        if(step <= 3){
+            pwm = 10 + (step-1) * 10;  // 10-30% (left side)
+        } else if(step <= 6){
+            pwm = 40 + (step-4) * 10;  // 40-60% (center)
+        } else {
+            pwm = 70 + (step-7) * 10;  // 70-90% (right side)
+        }
+        
+        // Ensure PWM stays within safe bounds for SG90 servo (0-100%)
+        if(pwm < 0) pwm = 0;
+        if(pwm > 100) pwm = 100;
+        
+        printf("Distance = %5d  (%5.1fcm) | step : %d | servo PWM: %d%%     \r",
+            delay, distanceCm, step, pwm);
         fflush(stdout);
-        usleep(10000);
+        usleep(50000);  // Increased delay for smoother servo movement
     }
     pthread_exit(NULL);
 }
@@ -151,6 +178,7 @@ void initGPIOKeypad(){
 
 void initGPIOLED(){
    lgGroupClaimOutput(h,0,4,ledGPIO,ledLevel);
+   lgGpioClaimOutput(h,0,PWM_pin,0);
 }
 
 
@@ -257,4 +285,22 @@ void blinkingLED(){
     }
     for(j=0;j<4;j++)
         lgGpioWrite(h,ledGPIO[j],0);
+}
+
+void *servoPWM(void *param){
+    int pON,pOFF;
+    //Increase thread priority to keep
+    // the precision or pulse width (pON)
+    piHiPri(50);
+    while(running){
+        pON = pwm*10+1000;
+        pOFF = (100-pwm)*10+18000;
+        lgGpioWrite(h,PWM_pin,1);
+        udelay(pON);
+        lgGpioWrite(h,PWM_pin,0);
+        yield();
+        usleep(pOFF);
+    }
+    piHiPri(0);
+    pthread_exit(0);
 }
